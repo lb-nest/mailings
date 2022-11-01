@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id       Int       @id
+  token    String
+  mailings Mailing[]
+}
+
+enum MailingStatus {
+  Disabled
+  Scheduled
+  Active
+  Finished
+}
+
+model Mailing {
+  id          Int             @id @default(autoincrement())
+  projectId   Int
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String          @default("")
+  color       String
+  tagIds      Int[]
+  hsmIds      Int[]
+  status      MailingStatus   @default(Disabled)
+  scheduledAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  workers     MailingWorker[]
+
+  @@unique([projectId, id])
+
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+enum MailingWorkerStatus {
+  Scheduled
+  Active
+  Finished
+  Failed
+}
+
+model MailingWorker {
+  id          Int                 @id @default(autoincrement())
+  mailingId   Int
+  mailing     Mailing             @relation(fields: [mailingId], references: [id], onDelete: Cascade)
+  contactId   Int
+  chatId      Int
+  messageId   Int?
+  variables   Json                @default("{}")
+  scheduledAt DateTime            @default(now())
+  status      MailingWorkerStatus @default(Scheduled)
+
+  @@index([mailingId])
+  @@index([contactId])
+  @@index([chatId])
+  @@index([messageId])
+  @@index([status])
+  @@index([scheduledAt])
+}
