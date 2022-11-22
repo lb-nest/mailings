@@ -45,34 +45,70 @@ export class MailingWorkerService {
 
     job.stop();
 
-    const mailingWorkers = await this.prismaService.mailingWorker.findMany({
-      where: {
-        scheduledAt: {
-          lte: new Date(),
-        },
-        status: MailingWorkerStatus.Scheduled,
+    const mailingWorkers = await this.prismaService.$transaction(
+      async (transactionClient) => {
+        const mailingWorkers = await transactionClient.mailingWorker.findMany({
+          where: {
+            scheduledAt: {
+              lte: new Date(),
+            },
+            status: MailingWorkerStatus.Scheduled,
+          },
+          take: 100,
+          include: {
+            mailing: {
+              include: {
+                project: true,
+              },
+            },
+          },
+        });
+
+        await transactionClient.mailingWorker.updateMany({
+          where: {
+            id: {
+              in: mailingWorkers.map(({ id }) => id),
+            },
+          },
+          data: {
+            status: MailingWorkerStatus.Active,
+          },
+        });
+
+        return mailingWorkers;
       },
-      take: 100,
-      include: {
-        mailing: true,
-      },
-    });
+    );
 
     for await (const mailingWorker of mailingWorkers) {
       try {
         for await (const hsmId of mailingWorker.mailing.hsmIds) {
-          let hsm = await this.cacheManager.get<any>(hsmId.toString());
+          let hsm = await this.cacheManager.get<any>(`hsm:${hsmId}`);
           if (!hsm) {
             hsm = await this.cacheManager.set(
-              hsmId.toString(),
-              await lastValueFrom(this.client.send('hsm.findOne', hsmId)),
+              `hsm:${hsmId}`,
+              await lastValueFrom(
+                this.client.send<any>('hsm.findOne', {
+                  headers: {
+                    authorization: `Bearer ${mailingWorker.mailing.project.token}`,
+                  },
+                  payload: hsmId,
+                }),
+              ),
             );
           }
 
           const message = await lastValueFrom(
-            this.client.send('chats.createMessage', {
-              ...hsm,
-              text: Mustache.render(hsm.text, mailingWorker.variables),
+            this.client.send<any>('chats.createMessage', {
+              headers: {
+                authorization: `Bearer ${mailingWorker.mailing.project.token}`,
+              },
+              payload: {
+                hsmId: hsm.id,
+                text: Mustache.render(hsm.text, mailingWorker.variables),
+                attachments: hsm.attachments,
+                buttons: hsm.buttons,
+                variables: mailingWorker.variables,
+              },
             }),
           );
 
