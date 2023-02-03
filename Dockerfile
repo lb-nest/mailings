@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine3.16 AS builder
 
 ENV NODE_ENV build
 
@@ -12,7 +12,7 @@ RUN npx prisma generate && npm run build && npm prune --production
 
 # ---
 
-FROM node:18-alpine
+FROM node:18-alpine3.16
 
 ENV NODE_ENV production
 
