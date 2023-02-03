@@ -9,9 +9,9 @@ export class MailingWorker implements Prisma.MailingWorker {
 
   contactId: number;
 
-  chatId: number;
+  accountId: string;
 
-  messageId: number;
+  messageId: number | null;
 
   @Exclude()
   variables: any;
@@ -19,4 +19,6 @@ export class MailingWorker implements Prisma.MailingWorker {
   scheduledAt: Date;
 
   status: Prisma.MailingWorkerStatus;
+
+  failedReason: string | null;
 }

@@ -13,6 +13,8 @@ export class Mailing implements Prisma.Mailing {
 
   color: string;
 
+  channelId: number;
+
   tagIds: number[];
 
   hsmIds: number[];

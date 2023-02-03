@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common/exceptions';
 import { ClientProxy } from '@nestjs/microservices';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
-import { MailingStatus } from '@prisma/client';
+import { MailingStatus, MailingWorkerStatus } from '@prisma/client';
 import { lastValueFrom } from 'rxjs';
 import { PrismaService } from '../prisma.service';
 import { CONTACTS_SERVICE } from '../shared/constants/broker';
@@ -13,21 +14,16 @@ import { Mailing } from './entities/mailing.entity';
 export class MailingService {
   private readonly logger = new Logger(MailingService.name);
 
+  private ALLOWED_STATUSES: string[] = [
+    MailingStatus.Disabled,
+    MailingStatus.Scheduled,
+  ];
+
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly prismaService: PrismaService,
     @Inject(CONTACTS_SERVICE) private readonly client: ClientProxy,
   ) {}
-
-  initialize(projectId: number, token: string): Promise<Record<string, never>> {
-    return this.prismaService.project.create({
-      data: {
-        id: projectId,
-        token,
-      },
-      select: {},
-    });
-  }
 
   create(
     projectId: number,
@@ -60,10 +56,18 @@ export class MailingService {
     });
   }
 
-  update(
+  async update(
     projectId: number,
     updateMailingDto: UpdateMailingDto,
   ): Promise<Mailing> {
+    const mailing = await this.findOne(projectId, updateMailingDto.id);
+
+    if (!this.ALLOWED_STATUSES.includes(mailing.status)) {
+      throw new ForbiddenException(
+        'It is forbidden to change statuses for completed mailings',
+      );
+    }
+
     return this.prismaService.mailing.update({
       where: {
         projectId_id: {
@@ -90,53 +94,74 @@ export class MailingService {
     name: MailingService.name,
   })
   async handleCron(): Promise<void> {
+    this.logger.log('Сhecking for mailings waiting to be sent');
+
     const job = this.schedulerRegistry.getCronJob(MailingService.name);
 
     job.stop();
 
-    const mailing = await this.prismaService.mailing.findFirst({
-      where: {
-        scheduledAt: {
-          lte: new Date(),
+    try {
+      const mailing = await this.prismaService.mailing.findFirst({
+        where: {
+          scheduledAt: {
+            lte: new Date(),
+          },
+          status: MailingStatus.Scheduled,
         },
-        status: MailingStatus.Scheduled,
-      },
-      include: {
-        project: true,
-      },
-    });
-
-    if (mailing) {
-      const contacts = await lastValueFrom(
-        this.client.send<any[]>('contacts.findAllWithTags', {
-          headers: {
-            authorization: `Bearer ${mailing.project.token}`,
-          },
-          payload: mailing.tagIds,
-        }),
-      );
-
-      await this.prismaService.mailingWorker.createMany({
-        data: contacts.map((contact) => ({
-          contactId: contact.id,
-          chatId: contact.chats[0].id,
-          mailingId: mailing.id,
-          variables: {
-            name: contact.name,
-          },
-        })),
       });
 
-      await this.prismaService.mailing.update({
+      if (mailing) {
+        const contacts = await lastValueFrom(
+          this.client.send<any[]>('findAllContactsForMailing', {
+            projectId: mailing.projectId,
+            tagIds: mailing.tagIds,
+            channelId: mailing.channelId,
+          }),
+        );
+
+        this.logger.log(
+          `${contacts.length} contacts affected by the mailing were found`,
+          mailing,
+        );
+
+        await this.prismaService.mailing.update({
+          where: {
+            id: mailing.id,
+          },
+          data: {
+            status: MailingStatus.Active,
+            workers: {
+              createMany: {
+                data: contacts.map(({ contactId, accountId, contact }) => ({
+                  contactId,
+                  accountId,
+                  variables: contact,
+                })),
+              },
+            },
+          },
+        });
+      }
+
+      await this.prismaService.mailing.updateMany({
         where: {
-          id: mailing.id,
+          status: MailingStatus.Active,
+          workers: {
+            every: {
+              status: {
+                in: [MailingWorkerStatus.Failed, MailingWorkerStatus.Finished],
+              },
+            },
+          },
         },
         data: {
-          status: MailingStatus.Active,
+          status: MailingStatus.Finished,
         },
       });
+    } catch (e) {
+      this.logger.error('Error when processing mailings', e);
+    } finally {
+      job.start();
     }
-
-    job.start();
   }
 }

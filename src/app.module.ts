@@ -8,7 +8,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
 import * as Joi from 'joi';
-import { AuthModule } from './auth/auth.module';
+import { MailingWorkerModule } from './mailing-worker/mailing-worker.module';
 import { MailingModule } from './mailing/mailing.module';
 import { PrismaService } from './prisma.service';
 import { CONTACTS_SERVICE, MESSAGING_SERVICE } from './shared/constants/broker';
@@ -50,7 +50,7 @@ import { CONTACTS_SERVICE, MESSAGING_SERVICE } from './shared/constants/broker';
         inject: [ConfigService],
       },
     ]),
-    AuthModule,
+    MailingWorkerModule,
     MailingModule,
   ],
   providers: [
