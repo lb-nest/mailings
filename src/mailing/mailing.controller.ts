@@ -1,17 +1,18 @@
-import { Controller, ParseIntPipe, UseInterceptors } from '@nestjs/common';
+import { Controller, ParseIntPipe, SerializeOptions } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { PlainToClassInterceptor } from '../shared/interceptors/plain-to-class.interceptor';
 import { CreateMailingDto } from './dto/create-mailing.dto';
 import { UpdateMailingDto } from './dto/update-mailing.dto';
 import { Mailing } from './entities/mailing.entity';
 import { MailingService } from './mailing.service';
 
+@SerializeOptions({
+  type: Mailing,
+})
 @Controller()
 export class MailingController {
   constructor(private readonly mailingService: MailingService) {}
 
   @MessagePattern('createMailing')
-  @UseInterceptors(new PlainToClassInterceptor(Mailing))
   create(
     @Payload('projectId', ParseIntPipe) projectId: number,
     @Payload() createMailingDto: CreateMailingDto,
@@ -20,7 +21,6 @@ export class MailingController {
   }
 
   @MessagePattern('findAllMailings')
-  @UseInterceptors(new PlainToClassInterceptor(Mailing))
   findAll(
     @Payload('projectId', ParseIntPipe) projectId: number,
   ): Promise<Mailing[]> {
@@ -28,7 +28,6 @@ export class MailingController {
   }
 
   @MessagePattern('findOneMailing')
-  @UseInterceptors(new PlainToClassInterceptor(Mailing))
   findOne(
     @Payload('projectId', ParseIntPipe) projectId: number,
     @Payload('id', ParseIntPipe) id: number,
@@ -37,7 +36,6 @@ export class MailingController {
   }
 
   @MessagePattern('updateMailing')
-  @UseInterceptors(new PlainToClassInterceptor(Mailing))
   update(
     @Payload('projectId', ParseIntPipe) projectId: number,
     @Payload() updateMailingDto: UpdateMailingDto,
@@ -46,7 +44,6 @@ export class MailingController {
   }
 
   @MessagePattern('removeMailing')
-  @UseInterceptors(new PlainToClassInterceptor(Mailing))
   remove(
     @Payload('projectId', ParseIntPipe) projectId: number,
     @Payload('id', ParseIntPipe) id: number,
