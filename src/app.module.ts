@@ -7,7 +7,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
-import * as Joi from 'joi';
+import Joi from 'joi';
 import { MailingWorkerModule } from './mailing-worker/mailing-worker.module';
 import { MailingModule } from './mailing/mailing.module';
 import { PrismaService } from './prisma.service';
